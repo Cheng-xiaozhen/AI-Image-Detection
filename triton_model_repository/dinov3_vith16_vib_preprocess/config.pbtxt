@@ -1,0 +1,36 @@
+name: "dinov3_vith16_vib_preprocess"
+backend: "python"
+max_batch_size: 64
+
+input [
+  {
+    name: "IMAGE_BYTES"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  }
+]
+
+output [
+  {
+    name: "pixel_values"
+    data_type: TYPE_FP32
+    dims: [ 3, 256, 256 ]
+  }
+]
+
+instance_group [
+  { kind: KIND_CPU, count: 4 }
+]
+
+parameters: {
+  key: "input_size"
+  value: { string_value: "256" }
+}
+parameters: {
+  key: "mean"
+  value: { string_value: "0.485,0.456,0.406" }
+}
+parameters: {
+  key: "std"
+  value: { string_value: "0.229,0.224,0.225" }
+}

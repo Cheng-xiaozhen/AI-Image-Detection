@@ -1,0 +1,32 @@
+name: "dinov3_vith16_vib"
+platform: "onnxruntime_onnx"
+default_model_filename: "dinov3_vith16-vib.onnx"
+max_batch_size: 64
+
+input [
+	{
+		name: "pixel_values"
+		data_type: TYPE_FP32
+		dims: [ 3, 256, 256 ]
+	}
+]
+
+output [
+	{
+		name: "probabilities"
+		data_type: TYPE_FP32
+		dims: [ 1 ]
+	}
+]
+
+dynamic_batching {
+	preferred_batch_size: [ 4, 8, 16, 32 ]
+	max_queue_delay_microseconds: 5000
+}
+
+instance_group [
+	{
+		kind: KIND_GPU
+		count: 1
+	}
+]
