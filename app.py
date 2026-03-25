@@ -109,6 +109,7 @@ def predict_batch(
     model_name: str,
     threshold: float,
     batch_size: int,
+    max_concurrency: int,
 ):
     client = TritonInferenceClient(
         url=server_url,
@@ -123,7 +124,11 @@ def predict_batch(
     )
     if not selected_paths:
         return {}, [], []
-    predictions = client.predict_paths(selected_paths, batch_size=batch_size)
+    predictions = client.predict_paths(
+        selected_paths,
+        batch_size=batch_size,
+        max_concurrency=max_concurrency,
+    )
     summary = summarize_predictions(predictions)
     return summary, _to_rows(predictions), _to_batch_stats(summary)
 
@@ -166,6 +171,7 @@ def build_app():
                 lines=3,
             )
             batch_size = gr.Slider(label="批大小", minimum=1, maximum=64, value=8, step=1)
+            max_concurrency = gr.Slider(label="并发批数", minimum=1, maximum=16, value=4, step=1)
             batch_button = gr.Button("批量推理")
             batch_summary = gr.JSON(label="汇总")
             batch_table = gr.Dataframe(
@@ -180,7 +186,7 @@ def build_app():
             )
             batch_button.click(
                 fn=predict_batch,
-                inputs=[multi_images, batch_paths, server_url, model_name, threshold, batch_size],
+                inputs=[multi_images, batch_paths, server_url, model_name, threshold, batch_size, max_concurrency],
                 outputs=[batch_summary, batch_table, batch_stats],
             )
 

@@ -33,6 +33,7 @@ def parse_args() -> argparse.Namespace:
         help="tensor: client side preprocess; raw: send IMAGE_BYTES to server preprocess model.",
     )
     parser.add_argument("--batch-size", type=int, default=1, help="Batch size per request.")
+    parser.add_argument("--concurrency", type=int, default=1, help="Number of in-flight batch requests.")
     parser.add_argument("--threshold", type=float, default=0.5, help="Classification threshold.")
     parser.add_argument(
         "--backbone-name",
@@ -57,7 +58,11 @@ def main() -> None:
         backbone_name=args.backbone_name,
     )
     image_paths = inference_client.list_image_files(args.input_path)
-    predictions = inference_client.predict_paths(image_paths, batch_size=args.batch_size)
+    predictions = inference_client.predict_paths(
+        image_paths,
+        batch_size=args.batch_size,
+        max_concurrency=args.concurrency,
+    )
     payload = {
         "summary": summarize_predictions(predictions),
         "predictions": predictions,

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import math
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -42,13 +44,18 @@ class TritonInferenceClient:
         input_name: Optional[str] = "IMAGE_BYTES",
         output_name: str = "probabilities",
         threshold: float = 0.5,
+        mode: str = "raw",
+        backbone_name: str = "",
     ) -> None:
         self.url = url
         self.model_name = model_name
         self.input_name = input_name
         self.output_name = output_name
         self.threshold = float(threshold)
+        self.mode = mode
+        self.backbone_name = backbone_name
         self._client = httpclient.InferenceServerClient(url=self.url)
+        self._thread_local = threading.local()
 
     def list_image_files(self, input_path: str | Path) -> List[str]:
         """
@@ -71,9 +78,61 @@ class TritonInferenceClient:
             raise ValueError(f"No image files were found under: {path}")
         return files
 
-    def predict_paths(self, image_paths: Sequence[str], batch_size: int = 1) -> Dict[str, Any]:
+    def _get_thread_client(self) -> httpclient.InferenceServerClient:
+        client = getattr(self._thread_local, "client", None)
+        if client is None:
+            client = httpclient.InferenceServerClient(url=self.url)
+            self._thread_local.client = client
+        return client
+
+    def _predict_one_batch(
+        self,
+        batch_paths: Sequence[str],
+        client: Optional[httpclient.InferenceServerClient] = None,
+    ) -> tuple[float, float, List[PredictionResult]]:
+        prep_start = time.perf_counter()
+        infer_input = self._build_infer_input(batch_paths)
+        batch_preprocess_seconds = time.perf_counter() - prep_start
+
+        infer_start = time.perf_counter()
+        probabilities = self._infer_numpy(infer_input, client=client)
+        batch_infer_seconds = time.perf_counter() - infer_start
+
+        batch_preprocess_latency_ms = (batch_preprocess_seconds * 1000.0) / max(len(batch_paths), 1)
+        batch_infer_latency_ms = (batch_infer_seconds * 1000.0) / max(len(batch_paths), 1)
+        flat_scores = self._flatten_probabilities(probabilities)
+        batch_results: List[PredictionResult] = []
+        for file_path, score in zip(batch_paths, flat_scores):
+            label = int(score >= self.threshold)
+            batch_results.append(
+                PredictionResult(
+                    file_path=file_path,
+                    score=float(score),
+                    label=label,
+                    preprocessing_latency_ms=batch_preprocess_latency_ms,
+                    inference_latency_ms=batch_infer_latency_ms,
+                    latency_ms=batch_infer_latency_ms,
+                )
+            )
+
+        return batch_preprocess_seconds, batch_infer_seconds, batch_results
+
+    def _predict_one_batch_in_thread(
+        self,
+        batch_paths: Sequence[str],
+    ) -> tuple[float, float, List[PredictionResult]]:
+        return self._predict_one_batch(batch_paths, client=self._get_thread_client())
+
+    def predict_paths(
+        self,
+        image_paths: Sequence[str],
+        batch_size: int = 1,
+        max_concurrency: int = 1,
+    ) -> Dict[str, Any]:
         if batch_size <= 0:
             raise ValueError("batch_size must be greater than 0")
+        if max_concurrency <= 0:
+            raise ValueError("max_concurrency must be greater than 0")
         if not image_paths:
             raise ValueError("image_paths must not be empty")
 
@@ -83,38 +142,40 @@ class TritonInferenceClient:
         results: List[PredictionResult] = []
 
         total_start = time.perf_counter()
-        for batch_paths in batches:
-            prep_start = time.perf_counter()
-            infer_input = self._build_infer_input(batch_paths)
-            batch_preprocess_seconds = time.perf_counter() - prep_start
-            preprocess_seconds += batch_preprocess_seconds
-
-            infer_start = time.perf_counter()
-            probabilities = self._infer_numpy(infer_input)
-            batch_infer_seconds = time.perf_counter() - infer_start
-            infer_seconds += batch_infer_seconds
-
-            batch_preprocess_latency_ms = (batch_preprocess_seconds * 1000.0) / max(len(batch_paths), 1)
-            batch_infer_latency_ms = (batch_infer_seconds * 1000.0) / max(len(batch_paths), 1)
-            flat_scores = self._flatten_probabilities(probabilities)
-            for file_path, score in zip(batch_paths, flat_scores):
-                label = int(score >= self.threshold)
-                results.append(
-                    PredictionResult(
-                        file_path=file_path,
-                        score=float(score),
-                        label=label,
-                        preprocessing_latency_ms=batch_preprocess_latency_ms,
-                        inference_latency_ms=batch_infer_latency_ms,
-                        latency_ms=batch_infer_latency_ms,
-                    )
+        if max_concurrency == 1 or len(batches) == 1:
+            for batch_paths in batches:
+                batch_preprocess_seconds, batch_infer_seconds, batch_results = self._predict_one_batch(
+                    batch_paths,
+                    client=self._client,
                 )
+                preprocess_seconds += batch_preprocess_seconds
+                infer_seconds += batch_infer_seconds
+                results.extend(batch_results)
+        else:
+            ordered_batches: List[Optional[tuple[float, float, List[PredictionResult]]]] = [None] * len(batches)
+            with ThreadPoolExecutor(max_workers=min(max_concurrency, len(batches))) as executor:
+                future_to_index = {
+                    executor.submit(self._predict_one_batch_in_thread, batch_paths): index
+                    for index, batch_paths in enumerate(batches)
+                }
+                for future in as_completed(future_to_index):
+                    index = future_to_index[future]
+                    ordered_batches[index] = future.result()
+
+            for batch_result in ordered_batches:
+                if batch_result is None:
+                    continue
+                batch_preprocess_seconds, batch_infer_seconds, batch_results = batch_result
+                preprocess_seconds += batch_preprocess_seconds
+                infer_seconds += batch_infer_seconds
+                results.extend(batch_results)
 
         total_seconds = time.perf_counter() - total_start
         throughput = len(results) / total_seconds if total_seconds > 0 else math.inf
         return {
             "model_name": self.model_name,
             "batch_size": batch_size,
+            "max_concurrency": max_concurrency,
             "items": len(results),
             "preprocess_seconds": preprocess_seconds,
             "infer_seconds": infer_seconds,
@@ -136,9 +197,14 @@ class TritonInferenceClient:
         infer_input.set_data_from_numpy(payload)
         return infer_input
 
-    def _infer_numpy(self, infer_input: httpclient.InferInput) -> np.ndarray:
+    def _infer_numpy(
+        self,
+        infer_input: httpclient.InferInput,
+        client: Optional[httpclient.InferenceServerClient] = None,
+    ) -> np.ndarray:
         outputs = [httpclient.InferRequestedOutput(self.output_name)]
-        response = self._client.infer(
+        infer_client = client or self._client
+        response = infer_client.infer(
             model_name=self.model_name,
             inputs=[infer_input],
             outputs=outputs,
