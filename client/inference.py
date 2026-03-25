@@ -158,7 +158,7 @@ class TritonInferenceClient:
                     executor.submit(self._predict_one_batch_in_thread, batch_paths): index
                     for index, batch_paths in enumerate(batches)
                 }
-                for future in as_completed(future_to_index):
+                for future in as_completed(future_to_index): # 按完成顺序返回任务
                     index = future_to_index[future]
                     ordered_batches[index] = future.result()
 

@@ -130,7 +130,8 @@ def predict_batch(
         max_concurrency=max_concurrency,
     )
     summary = summarize_predictions(predictions)
-    return summary, _to_rows(predictions), _to_batch_stats(summary)
+    #return summary, _to_rows(predictions), _to_batch_stats(summary)
+    return  _to_rows(predictions), _to_batch_stats(summary)
 
 
 def build_app():
@@ -151,7 +152,7 @@ def build_app():
             single_image = gr.Image(label="输入图片", type="filepath")
             single_path = gr.Textbox(label="或输入图片路径", placeholder="例如: /data/test/1.jpg")
             single_button = gr.Button("开始推理")
-            single_summary = gr.JSON(label="汇总")
+            #single_summary = gr.JSON(label="汇总")
             single_table = gr.Dataframe(
                 headers=["文件名", "标签", "真/假(0/1)", "预处理延迟(ms)", "推理延迟(ms)"],
                 datatype=["str", "str", "number", "number", "number"],
@@ -160,7 +161,7 @@ def build_app():
             single_button.click(
                 fn=predict_single,
                 inputs=[single_image, single_path, server_url, model_name, threshold],
-                outputs=[single_summary, single_table],
+                outputs=[single_table],
             )
 
         with gr.Tab("批量推理"):
@@ -173,7 +174,7 @@ def build_app():
             batch_size = gr.Slider(label="批大小", minimum=1, maximum=64, value=8, step=1)
             max_concurrency = gr.Slider(label="并发批数", minimum=1, maximum=16, value=4, step=1)
             batch_button = gr.Button("批量推理")
-            batch_summary = gr.JSON(label="汇总")
+            #batch_summary = gr.JSON(label="汇总")
             batch_table = gr.Dataframe(
                 headers=["文件名", "标签", "真/假(0/1)", "预处理延迟(ms)", "推理延迟(ms)"],
                 datatype=["str", "str", "number", "number", "number"],
@@ -187,7 +188,7 @@ def build_app():
             batch_button.click(
                 fn=predict_batch,
                 inputs=[multi_images, batch_paths, server_url, model_name, threshold, batch_size, max_concurrency],
-                outputs=[batch_summary, batch_table, batch_stats],
+                outputs=[batch_table, batch_stats],
             )
 
     return demo
