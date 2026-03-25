@@ -1,0 +1,31 @@
+name: "convnext2_tiny_fp32"
+platform: "tensorrt_plan"
+max_batch_size: 64
+
+input [
+  {
+    name: "pixel_values"
+    data_type: TYPE_FP32
+    dims: [ 3, 384, 384 ]
+  }
+]
+
+output [
+  {
+    name: "probabilities"
+    data_type: TYPE_FP32
+    dims: [ 1 ]
+  }
+]
+
+instance_group [
+  { kind: KIND_GPU, gpus: [0], count: 1 },
+  { kind: KIND_GPU, gpus: [1], count: 1 },
+  { kind: KIND_GPU, gpus: [2], count: 1 },
+  { kind: KIND_GPU, gpus: [3], count: 1 }
+]
+
+dynamic_batching {
+  preferred_batch_size: [ 8, 16, 32,64 ]
+  max_queue_delay_microseconds: 8000
+}

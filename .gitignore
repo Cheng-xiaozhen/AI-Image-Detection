@@ -1,0 +1,114 @@
+# =========================
+# OS / Filesystem
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# Editor / IDE
+# =========================
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.swp
+*.swo
+*~
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+.python-version
+
+# Packaging / build artifacts
+build/
+dist/
+site/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Testing / quality tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+pytestdebug.log
+
+# Jupyter / notebooks
+.ipynb_checkpoints/
+
+# =========================
+# Logs / runtime outputs
+# =========================
+*.log
+*.out
+*.err
+*.pid
+*.seed
+*.stackdump
+
+# Project-generated logs, eval outputs, and experiment artifacts
+logs/*
+!logs/.gitkeep
+**/runs/
+**/eval/
+**/checkpoint-*/
+**/final_model/
+**/eval_report.json
+
+# =========================
+# Large ML artifacts
+# =========================
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.safetensors
+*.onnx
+
+# Triton / inference generated files
+triton_model_repository/**/1/
+triton_model_repository/**/*.engine
+triton_model_repository/**/*.plan
+
+# =========================
+# Temporary / cache files
+# =========================
+.cache/
+.tmp/
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
+
+# =========================
+# Local secrets / credentials
+# =========================
+*.pem
+*.key
+*.crt
+secrets/
+credentials/

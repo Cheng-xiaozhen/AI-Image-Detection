@@ -1,0 +1,48 @@
+name: "convnext2_tiny_ensemble"
+platform: "ensemble"
+max_batch_size: 64
+
+input [
+  {
+    name: "IMAGE_BYTES"
+    data_type: TYPE_STRING
+    dims: [ 1 ]
+  }
+]
+
+output [
+  {
+    name: "probabilities"
+    data_type: TYPE_FP32
+    dims: [ 1 ]
+  }
+]
+
+ensemble_scheduling {
+  step [
+    {
+      model_name: "convnext2_tiny_preprocess"
+      model_version: -1
+      input_map {
+        key: "IMAGE_BYTES"
+        value: "IMAGE_BYTES"
+      }
+      output_map {
+        key: "pixel_values"
+        value: "preprocessed_pixel_values"
+      }
+    },
+    {
+      model_name: "convnext2_tiny_fp32"
+      model_version: -1
+      input_map {
+        key: "pixel_values"
+        value: "preprocessed_pixel_values"
+      }
+      output_map {
+        key: "probabilities"
+        value: "probabilities"
+      }
+    }
+  ]
+}
