@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
+from client.explainability import GradCAMExplainer
 from client.inference import TritonInferenceClient, summarize_predictions
 
 
@@ -32,10 +33,26 @@ def _split_manual_paths(path_text: str) -> List[str]:
     return [item.strip() for item in normalized.split(",") if item.strip()]
 
 
+def _list_image_files_local(input_path: str | Path) -> List[str]:
+    path = Path(input_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Input path does not exist: {path}")
+    if path.is_file():
+        return [str(path)]
+    files = [
+        str(file_path)
+        for file_path in sorted(path.rglob("*"))
+        if file_path.is_file() and file_path.suffix.lower() in {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff", ".gif"}
+    ]
+    if not files:
+        raise ValueError(f"No image files were found under: {path}")
+    return files
+
+
 def _collect_image_paths(
     uploaded_paths: List[str],
     manual_paths_text: str,
-    client: TritonInferenceClient,
+    client: TritonInferenceClient | None,
     single_only: bool,
 ) -> List[str]:
     """
@@ -50,7 +67,7 @@ def _collect_image_paths(
         if path:
             merged.append(path)
     for raw_path in _split_manual_paths(manual_paths_text):
-        discovered = client.list_image_files(raw_path)
+        discovered = client.list_image_files(raw_path) if client is not None else _list_image_files_local(raw_path)
         merged.extend(discovered)
 
     unique_paths: List[str] = []
@@ -134,6 +151,39 @@ def predict_batch(
     return  _to_rows(predictions), _to_batch_stats(summary)
 
 
+def predict_explain_single(
+    image_path: str,
+    input_path: str,
+    model_name: str,
+    checkpoint_dir: str,
+    threshold: float,
+):
+    selected_paths = _collect_image_paths(
+        uploaded_paths=[image_path] if image_path else [],
+        manual_paths_text=input_path,
+        client=None,
+        single_only=True,
+    )
+    if not selected_paths:
+        return {}, [], None, None, None
+
+    explainer = GradCAMExplainer(
+        model_name=model_name,
+        checkpoint_dir=checkpoint_dir,
+        threshold=threshold,
+    )
+    explained = explainer.explain(selected_paths[0])
+    prediction = explained["prediction"]
+    predictions_payload = {"results": [prediction]}
+    summary = summarize_predictions(predictions_payload)
+    summary["result"] = prediction
+    label_value = int(prediction["label"])
+    summary["label_text"] = "假" if label_value == 1 else "真"
+    summary["model_name"] = model_name
+    summary["checkpoint_dir"] = checkpoint_dir
+    return summary, _to_rows(predictions_payload), explained["original_image"], explained["heatmap"], explained["overlay"]
+
+
 def build_app():
     try:
         import gradio as gr
@@ -144,15 +194,15 @@ def build_app():
         gr.Markdown("# Triton 伪造图像检测\n支持单图、批量推理与基础性能统计。")
 
         with gr.Row():
-            server_url = gr.Dropdown(label="Triton 地址",choices=["localhost:8000"], value="localhost:8000")
-            model_name = gr.Dropdown(label="模型名",choices=["convnext2_tiny_ensemble"], value="convnext2_tiny_ensemble")
+            server_url = gr.Dropdown(label="Triton 地址", choices=["localhost:8000"], value="localhost:8000")
+            model_name = gr.Dropdown(label="模型名", choices=["convnext2_tiny_ensemble"], value="convnext2_tiny_ensemble")
             threshold = gr.Slider(label="阈值", minimum=0.0, maximum=1.0, value=0.5, step=0.01)
 
         with gr.Tab("单样本推理"):
             single_image = gr.Image(label="输入图片", type="filepath")
             single_path = gr.Textbox(label="或输入图片路径", placeholder="例如: /data/test/1.jpg")
             single_button = gr.Button("开始推理")
-            #single_summary = gr.JSON(label="汇总")
+            single_summary = gr.JSON(label="汇总", visible=False)
             single_table = gr.Dataframe(
                 headers=["文件名", "标签", "真/假(0/1)", "预处理延迟(ms)", "推理延迟(ms)"],
                 datatype=["str", "str", "number", "number", "number"],
@@ -161,7 +211,7 @@ def build_app():
             single_button.click(
                 fn=predict_single,
                 inputs=[single_image, single_path, server_url, model_name, threshold],
-                outputs=[single_table],
+                outputs=[single_summary, single_table],
             )
 
         with gr.Tab("批量推理"):
@@ -189,6 +239,36 @@ def build_app():
                 fn=predict_batch,
                 inputs=[multi_images, batch_paths, server_url, model_name, threshold, batch_size, max_concurrency],
                 outputs=[batch_table, batch_stats],
+            )
+
+        with gr.Tab("解释可视化"):
+            explain_image = gr.Image(label="输入图片", type="filepath")
+            explain_path = gr.Textbox(label="或输入图片路径", placeholder="例如: /data/test/1.jpg")
+            explain_model_name = gr.Dropdown(
+                label="本地解释模型",
+                choices=["convnext2_tiny", "convnext2"],
+                value="convnext2_tiny",
+            )
+            explain_checkpoint = gr.Textbox(
+                label="权重目录",
+                value="logs/convnext2_tiny/final_model",
+                placeholder="例如: logs/convnext2_tiny/final_model",
+            )
+            explain_button = gr.Button("生成解释图")
+            explain_summary = gr.JSON(label="解释汇总", visible=False)
+            explain_table = gr.Dataframe(
+                headers=["文件名", "标签", "真/假(0/1)", "预处理延迟(ms)", "推理延迟(ms)"],
+                datatype=["str", "str", "number", "number", "number"],
+                label="解释结果",
+            )
+            with gr.Row():
+                explain_original = gr.Image(label="原图", type="pil")
+                explain_heatmap = gr.Image(label="热力图", type="pil")
+                explain_overlay = gr.Image(label="叠加图", type="pil")
+            explain_button.click(
+                fn=predict_explain_single,
+                inputs=[explain_image, explain_path, explain_model_name, explain_checkpoint, threshold],
+                outputs=[explain_summary, explain_table, explain_original, explain_heatmap, explain_overlay],
             )
 
     return demo

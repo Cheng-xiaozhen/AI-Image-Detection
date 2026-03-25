@@ -36,4 +36,4 @@ chengxiaozhen@censoring02:~/Test/SFT-Infra$ tree -L 1
 - utils: 工具代码目录
 
 # 需求
-* 在批量推理的时候，在批量统计模块，平均推理时间为20ms左右，吞吐量为55文件/s左右，应该如何优化提速？
+
