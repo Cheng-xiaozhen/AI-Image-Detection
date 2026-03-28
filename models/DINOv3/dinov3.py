@@ -638,13 +638,6 @@ class DINOv3Vith16Bottleneck(DINOv3Model):
     def __init__(self, **kwargs):
         super().__init__(model_name='dinov3_vith16', layer_strategy='bottleneck',**kwargs)
 
-@register_model("dinov3_vith16-vib")
-class DINOv3Vith16VIB(DINOv3Model):
-    def __init__(self, **kwargs):
-        super().__init__(model_name='dinov3_vith16', layer_strategy='vib',**kwargs)
-
-
-
 @register_model("dinov3_vit_7b")
 class DINOv3Vit7B(DINOv3Model):
     def __init__(self, **kwargs):

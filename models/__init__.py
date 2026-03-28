@@ -13,8 +13,8 @@ from .DINOv3.dinov3 import (
     DINOv3Vitl16,
     DINOv3Vits16,
     DINOv3Vith16Linear,
-    DINOv3Vith16VIB
 )
+from .DINOv3.dinov3_vith16_vib import DINOv3Vith16VIB
 __all__ = [
 	"create_model",
 	"list_models",

@@ -1,7 +1,7 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, cast
 
 import torch
 import torch.nn as nn
@@ -20,11 +20,13 @@ class OnnxExportWrapper(nn.Module):
 		self.export_probs = export_probs
 
 	def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-		logits = self.model(pixel_values=pixel_values).logits # 原始模型输出logits
+		forward_logits = getattr(self.model, "forward_logits", None)
+		if callable(forward_logits):
+			logits = cast(torch.Tensor, forward_logits(pixel_values))
+		else:
+			logits = self.model(pixel_values=pixel_values).logits # 原始模型输出logits
 		if self.export_probs: # 如果需要导出概率，则对logits进行后处理
-			if logits.shape[-1] == 1:
-				return torch.sigmoid(logits)
-			return torch.softmax(logits, dim=-1)
+			return torch.sigmoid(logits)
 		return logits
 
 
@@ -132,8 +134,9 @@ def verify_onnx_file(onnx_path: Path) -> None:
 			"ONNX validation requires the 'onnx' package to be installed."
 		) from exc
 
-	model = onnx.load(str(onnx_path))
-	onnx.checker.check_model(model)
+	# 对于大于 2GiB 的 ONNX 文件，先加载模型对象会触发 protobuf 限制。
+	# 直接传入文件路径给 checker，可避免该问题。
+	onnx.checker.check_model(str(onnx_path))
 	print(f"ONNX validation succeeded: {onnx_path}")
 
 
@@ -141,7 +144,7 @@ def export_to_onnx(args: argparse.Namespace) -> Path:
 	if args.device == "cuda" and not torch.cuda.is_available():
 		raise RuntimeError("CUDA is not available, please use --device cpu.")
 
-	model = create_model(args.model_name, num_classes=args.num_classes)
+	model = create_model(args.model_name)
 	load_checkpoint_weights(model, args.checkpoint)
 	model.eval()
 
@@ -150,6 +153,7 @@ def export_to_onnx(args: argparse.Namespace) -> Path:
 		height = args.height
 	if args.width is not None:
 		width = args.width
+	print(f"Inferred input size: ({height}, {width})")
 
 	device = torch.device(args.device)
 	wrapper = OnnxExportWrapper(model, export_probs=args.export_probs).to(device)
@@ -191,3 +195,4 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
+

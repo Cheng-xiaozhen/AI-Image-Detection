@@ -195,7 +195,7 @@ def build_app():
 
         with gr.Row():
             server_url = gr.Dropdown(label="Triton 地址", choices=["localhost:8000"], value="localhost:8000")
-            model_name = gr.Dropdown(label="模型名", choices=["convnext2_tiny_ensemble"], value="convnext2_tiny_ensemble")
+            model_name = gr.Dropdown(label="模型名", choices=["convnext2_tiny_ensemble", "dinov3_vith16_ensemble"], value="convnext2_tiny_ensemble")
             threshold = gr.Slider(label="阈值", minimum=0.0, maximum=1.0, value=0.5, step=0.01)
 
         with gr.Tab("单样本推理"):
@@ -260,6 +260,7 @@ def build_app():
                 headers=["文件名", "标签", "真/假(0/1)", "预处理延迟(ms)", "推理延迟(ms)"],
                 datatype=["str", "str", "number", "number", "number"],
                 label="解释结果",
+                visible=False,
             )
             with gr.Row():
                 explain_original = gr.Image(label="原图", type="pil")

@@ -4,16 +4,16 @@ set -euo pipefail
 # 分布式评估示例
 # 如需调整参数，直接修改下方变量或追加参数
 
-CHECKPOINT=${CHECKPOINT:-"/home/chengxiaozhen/Test/SFT-Infra/logs/convnext2_tiny/final_model"}
-OUTPUT_DIR=${OUTPUT_DIR:-"/home/chengxiaozhen/Test/SFT-Infra/logs/convnext2_tiny/eval"}
-EVAL_DATA_DIR=${EVAL_DATA_DIR:-"/home/chengxiaozhen/data/Benchmark/Chameleon"}
+CHECKPOINT=${CHECKPOINT:-"/home/chengxiaozhen/Test/SFT-Infra/logs/dinov3_vith16-vib/final_model"}
+OUTPUT_DIR=${OUTPUT_DIR:-"/home/chengxiaozhen/Test/SFT-Infra/logs/dinov3_vith16-vib/eval2"}
+EVAL_DATA_DIR=${EVAL_DATA_DIR:-"/home/chengxiaozhen/data/Eval_Merge"}
 
-MODEL_NAME=${MODEL_NAME:-"convnext2_tiny"}
+MODEL_NAME=${MODEL_NAME:-"dinov3_vith16-vib"}
 NUM_CLASSES=${NUM_CLASSES:-1}
 
 EVAL_BS=${EVAL_BS:-32}
 LOGGING_STEPS=${LOGGING_STEPS:-50}
-FP16=${FP16:-0} # 是否使用半精度评估，1表示启用，0表示禁用
+FP16=${FP16:-1}
 DATALOADER_NUM_WORKERS=${DATALOADER_NUM_WORKERS:-8}
 
 ACCELERATE_CONFIG=${ACCELERATE_CONFIG:-""}

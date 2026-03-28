@@ -35,5 +35,4 @@ chengxiaozhen@censoring02:~/Test/SFT-Infra$ tree -L 1
 - triton_model_repository: triton模型仓库目录
 - utils: 工具代码目录
 
-# 需求
 

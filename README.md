@@ -5,5 +5,5 @@ sudo docker run --gpus all --rm -it --net host --shm-size=4g -v /home/chengxiaoz
 
 # 启动TritonServer
 ```
-tritonserver --model-repository=/models --model-control-mode=poll --repository-poll-secs=5
+tritonserver --model-repository=/models --model-control-mode=poll --repository-poll-secs=5 --pinned-memory-pool-byte-size=1073741824
 ```
