@@ -1,3 +1,5 @@
+images/
+
 # =========================
 # OS / Filesystem
 # =========================
@@ -89,9 +91,9 @@ logs/*
 *.onnx
 
 # Triton / inference generated files
-triton_model_repository/**/1/
-triton_model_repository/**/*.engine
-triton_model_repository/**/*.plan
+system/triton_model_repository/**/1/
+system/triton_model_repository/**/*.engine
+system/triton_model_repository/**/*.plan
 
 # =========================
 # Temporary / cache files

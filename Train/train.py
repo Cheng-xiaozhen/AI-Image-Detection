@@ -23,7 +23,7 @@ except Exception:
     _SKLEARN_AVAILABLE = False
 
 from models.registry import create_model, list_models
-from utils.dataset_builder import ImageSample, build_image_index, split_samples, ForgeryImageDataset,build_datasets_index
+from train.utils.dataset_builder import ImageSample, build_image_index, split_samples, ForgeryImageDataset,build_datasets_index
 
 
 class StopOnAccuracyThresholdCallback(TrainerCallback):

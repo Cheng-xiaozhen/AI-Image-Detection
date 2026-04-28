@@ -4,16 +4,16 @@ set -euo pipefail
 # 分布式训练（4xV100）示例
 # 如需调整参数，直接修改下方变量或追加参数
 
-DATA_DIR=${DATA_DIR:-"/home/chengxiaozhen/data/Train"}
-OUTPUT_DIR=${OUTPUT_DIR:-"/home/chengxiaozhen/Test/SFT-Infra/logs/CLIP"}
+DATA_DIR=${DATA_DIR:-"/home/chengxiaozhen/data/Train/BaiXiang"}
+OUTPUT_DIR=${OUTPUT_DIR:-"/home/chengxiaozhen/Test/SFT-Infra/logs/DINOv3"}
 EVAL_DATA_DIR=${EVAL_DATA_DIR:-"/home/chengxiaozhen/data/Benchmark /home/chengxiaozhen/data/Eval_Merge"}
 
-MODEL_NAME=${MODEL_NAME:-"clip_vit_base"}
+MODEL_NAME=${MODEL_NAME:-"dinov3_vith16-vib"}
 
 TRAIN_BS=${TRAIN_BS:-32}
 EVAL_BS=${EVAL_BS:-32}
-EPOCHS=${EPOCHS:-3}
-LR=${LR:-5e-5} # 全参数微调建议 5e-5，线性学习率调度建议 1e-3
+EPOCHS=${EPOCHS:-5}
+LR=${LR:-1e-3} # 全参数微调建议 5e-5，线性学习率调度建议 1e-3
 WD=${WD:-1e-4}
 WARMUP_RATIO=${WARMUP_RATIO:-0.03}
 LOGGING_STEPS=${LOGGING_STEPS:-50}

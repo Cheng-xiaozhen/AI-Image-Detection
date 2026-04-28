@@ -1,5 +1,6 @@
 name: "convnext2_tiny_ensemble"
 platform: "ensemble"
+# 如果要修改max_batch_size，需要重构引擎，max_batch_size是构建引擎时的超参数
 max_batch_size: 64
 
 input [

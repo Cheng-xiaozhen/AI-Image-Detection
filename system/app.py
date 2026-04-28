@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import List
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from client.explainability import GradCAMExplainer
 from client.inference import TritonInferenceClient, summarize_predictions
@@ -11,16 +16,10 @@ def _to_rows(predictions: dict) -> List[List[object]]:
     rows: List[List[object]] = []
     for item in predictions.get("results", []):
         label_value = int(item["label"])
-        label_text = "假" if label_value == 1 else "真"
-        preprocess_latency_ms = float(item.get("preprocessing_latency_ms", 0.0))
-        inference_latency_ms = float(item.get("inference_latency_ms", item.get("latency_ms", 0.0)))
         rows.append(
             [
                 Path(item["file_path"]).name,
-                label_text,
                 label_value,
-                round(preprocess_latency_ms, 3),
-                round(inference_latency_ms, 3),
             ]
         )
     return rows
@@ -99,6 +98,17 @@ def _to_batch_stats(summary: dict) -> List[List[object]]:
     ]
 
 
+def _resolve_checkpoint_dir(relative_dir: str) -> str:
+    candidate_paths = [
+        Path(relative_dir),
+        PROJECT_ROOT / relative_dir,
+    ]
+    for path in candidate_paths:
+        if path.exists() and path.is_dir():
+            return str(path.resolve())
+    return str((PROJECT_ROOT / relative_dir).resolve())
+
+
 def predict_single(image_path: str, input_path: str, server_url: str, model_name: str, threshold: float):
     client = TritonInferenceClient(
         url=server_url,
@@ -117,6 +127,40 @@ def predict_single(image_path: str, input_path: str, server_url: str, model_name
     summary = summarize_predictions(predictions)
     summary["result"] = predictions["results"][0]
     return summary, _to_rows(predictions)
+
+
+def predict_single_ui(
+    image_path: str,
+    input_path: str,
+    server_url: str,
+    model_name: str,
+    threshold: float,
+    generate_explain: bool,
+):
+    summary, _ = predict_single(image_path, input_path, server_url, model_name, threshold)
+    result = summary.get("result", {})
+    if not result:
+        return "", None, None
+    label_value = int(result.get("label", 0))
+    label_text = "假" if label_value == 1 else "真"
+    score = float(result.get("score", 0.0))
+    overlay = None
+    if generate_explain:
+        explain_model_name = "convnext2_tiny"
+        explain_checkpoint = _resolve_checkpoint_dir("logs/convnext2_tiny/final_model")
+        if model_name == "dinov3_vith16_ensemble":
+            explain_model_name = "dinov3_vith16-vib"
+            explain_checkpoint = _resolve_checkpoint_dir("logs/dinov3_vith16-vib/final_model")
+
+        _, _, _, _, overlay = predict_explain_single(
+            image_path,
+            input_path,
+            explain_model_name,
+            explain_checkpoint,
+            threshold,
+        )
+
+    return label_text, round(score, 6), overlay
 
 
 def predict_batch(
@@ -190,28 +234,29 @@ def build_app():
     except ImportError as exc:
         raise RuntimeError("gradio is required to run app.py") from exc
 
-    with gr.Blocks(title="Triton Forgery Detection") as demo:
-        gr.Markdown("# Triton 伪造图像检测\n支持单图、批量推理与基础性能统计。")
+    with gr.Blocks(title="AI-Generated Image Detection") as demo:
+        gr.Markdown("# AI-Generated Image Detection\n支持单图、批量推理与基础性能统计。")
 
         with gr.Row():
-            server_url = gr.Dropdown(label="Triton 地址", choices=["localhost:8000"], value="localhost:8000")
-            model_name = gr.Dropdown(label="模型名", choices=["convnext2_tiny_ensemble", "dinov3_vith16_ensemble"], value="convnext2_tiny_ensemble")
+            server_url = gr.Dropdown(label="服务API", choices=["localhost:8000"], value="localhost:8000")
+            model_name = gr.Dropdown(label="模型名", choices=["convnext2_tiny_ensemble", "dinov3_vith16_ensemble"], value="dinov3_vith16_ensemble")
             threshold = gr.Slider(label="阈值", minimum=0.0, maximum=1.0, value=0.5, step=0.01)
 
         with gr.Tab("单样本推理"):
-            single_image = gr.Image(label="输入图片", type="filepath")
-            single_path = gr.Textbox(label="或输入图片路径", placeholder="例如: /data/test/1.jpg")
-            single_button = gr.Button("开始推理")
-            single_summary = gr.JSON(label="汇总", visible=False)
-            single_table = gr.Dataframe(
-                headers=["文件名", "标签", "真/假(0/1)", "预处理延迟(ms)", "推理延迟(ms)"],
-                datatype=["str", "str", "number", "number", "number"],
-                label="结果",
-            )
+            with gr.Row():
+                with gr.Column(scale=1):
+                    single_image = gr.Image(label="输入图片", type="filepath")
+                    single_path = gr.Textbox(label="或输入图片路径", placeholder="例如: /data/test/1.jpg")
+                    single_explain = gr.Checkbox(label="生成可解释性图示", value=False)
+                    single_button = gr.Button("开始推理")
+                with gr.Column(scale=1):
+                    single_result_label = gr.Textbox(label="判定结果", interactive=False)
+                    single_result_score = gr.Number(label="置信度", precision=6, interactive=False)
+                    single_overlay = gr.Image(label="解释叠加图", type="pil")
             single_button.click(
-                fn=predict_single,
-                inputs=[single_image, single_path, server_url, model_name, threshold],
-                outputs=[single_summary, single_table],
+                fn=predict_single_ui,
+                inputs=[single_image, single_path, server_url, model_name, threshold, single_explain],
+                outputs=[single_result_label, single_result_score, single_overlay],
             )
 
         with gr.Tab("批量推理"):
@@ -221,13 +266,13 @@ def build_app():
                 placeholder="例如: /data/a.jpg, /data/b.png 或 /data/eval_set",
                 lines=3,
             )
-            batch_size = gr.Slider(label="批大小", minimum=1, maximum=64, value=8, step=1)
+            batch_size = gr.Slider(label="批大小", minimum=1, maximum=64, value=32, step=1) 
             max_concurrency = gr.Slider(label="并发批数", minimum=1, maximum=16, value=4, step=1)
             batch_button = gr.Button("批量推理")
             #batch_summary = gr.JSON(label="汇总")
             batch_table = gr.Dataframe(
-                headers=["文件名", "标签", "真/假(0/1)", "预处理延迟(ms)", "推理延迟(ms)"],
-                datatype=["str", "str", "number", "number", "number"],
+                headers=["文件名", "真/假(0/1)"],
+                datatype=["str", "number"],
                 label="结果",
             )
             batch_stats = gr.Dataframe(
@@ -239,37 +284,6 @@ def build_app():
                 fn=predict_batch,
                 inputs=[multi_images, batch_paths, server_url, model_name, threshold, batch_size, max_concurrency],
                 outputs=[batch_table, batch_stats],
-            )
-
-        with gr.Tab("解释可视化"):
-            explain_image = gr.Image(label="输入图片", type="filepath")
-            explain_path = gr.Textbox(label="或输入图片路径", placeholder="例如: /data/test/1.jpg")
-            explain_model_name = gr.Dropdown(
-                label="本地解释模型",
-                choices=["convnext2_tiny", "convnext2"],
-                value="convnext2_tiny",
-            )
-            explain_checkpoint = gr.Textbox(
-                label="权重目录",
-                value="logs/convnext2_tiny/final_model",
-                placeholder="例如: logs/convnext2_tiny/final_model",
-            )
-            explain_button = gr.Button("生成解释图")
-            explain_summary = gr.JSON(label="解释汇总", visible=False)
-            explain_table = gr.Dataframe(
-                headers=["文件名", "标签", "真/假(0/1)", "预处理延迟(ms)", "推理延迟(ms)"],
-                datatype=["str", "str", "number", "number", "number"],
-                label="解释结果",
-                visible=False,
-            )
-            with gr.Row():
-                explain_original = gr.Image(label="原图", type="pil")
-                explain_heatmap = gr.Image(label="热力图", type="pil")
-                explain_overlay = gr.Image(label="叠加图", type="pil")
-            explain_button.click(
-                fn=predict_explain_single,
-                inputs=[explain_image, explain_path, explain_model_name, explain_checkpoint, threshold],
-                outputs=[explain_summary, explain_table, explain_original, explain_heatmap, explain_overlay],
             )
 
     return demo

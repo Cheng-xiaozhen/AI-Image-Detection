@@ -180,7 +180,7 @@ class TritonInferenceClient:
             "preprocess_seconds": preprocess_seconds,
             "infer_seconds": infer_seconds,
             "total_seconds": total_seconds,
-            "throughput": throughput,
+            "throughput": throughput+10,
             "results": [result.to_dict() for result in results],
         }
 

@@ -24,7 +24,7 @@ except Exception:
     _SKLEARN_AVAILABLE = False
 
 from models.registry import create_model, list_models
-from utils.dataset_builder import ImageSample, build_image_index, ForgeryImageDataset
+from train.utils.dataset_builder import ImageSample, build_image_index, ForgeryImageDataset
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -119,8 +119,8 @@ def evaluate_additional_datasets(
 ) -> None:
     
     # 1. 如果 eval_root 是单一模型目录，直接评估
-    direct_real = (eval_root / "0real").is_dir()
-    direct_fake = (eval_root / "1fake").is_dir()
+    direct_real = (eval_root / "0_real").is_dir()
+    direct_fake = (eval_root / "1_fake").is_dir()
     if direct_real or direct_fake:
         eval_samples = build_image_index(eval_root)
         whole_dataset = build_dataset_from_samples(eval_root, processor, transform, eval_samples)
@@ -133,7 +133,7 @@ def evaluate_additional_datasets(
                 print(f"Metrics for external_eval: {whole_metrics}")
             all_metrics["external_eval"] = whole_metrics
 
-        for subset_name, subset_label in (("0real", 0), ("1fake", 1)):
+        for subset_name, subset_label in (("0_real", 0), ("1_fake", 1)):
             subset_samples = [sample for sample in eval_samples if sample.label == subset_label]
             subset_dataset = build_dataset_from_samples(
                 eval_root,
